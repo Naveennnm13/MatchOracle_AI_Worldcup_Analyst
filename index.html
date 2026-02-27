@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MatchOracle AI — Personal FIFA World Cup Analyst</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0B0F14;--panel:#121A23;--border:rgba(255,255,255,0.08);
+  --text:rgba(255,255,255,0.92);--muted:rgba(255,255,255,0.55);
+  --green:#39FF14;--teal:#00F5D4;--pink:#FF2ED1;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes scanline{0%{transform:translateY(-4px)}100%{transform:translateY(100vh)}}
+@keyframes wcGlow{
+  0%,100%{filter:drop-shadow(0 0 5px #39FF14) drop-shadow(0 0 12px rgba(57,255,20,0.4));}
+  50%{filter:drop-shadow(0 0 14px #39FF14) drop-shadow(0 0 28px rgba(57,255,20,0.75)) drop-shadow(0 0 44px rgba(0,245,212,0.35));}
+}
+@keyframes wcBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes probFill{from{width:0%}to{width:var(--w)}}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-thumb{background:rgba(57,255,20,0.2);border-radius:2px}
+textarea::placeholder{color:rgba(255,255,255,0.28)}
+select option{background:#121A23}
+
+/* ── Layout ── */
+#app{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:0 24px;height:100vh;display:flex;flex-direction:column;}
+#grid{flex:1;display:grid;grid-template-columns:65% 35%;gap:14px;padding:14px 0 20px;min-height:0;}
+.panel{background:linear-gradient(160deg,rgba(18,26,35,0.44),rgba(11,15,20,0.50));border:1px solid rgba(255,255,255,0.09);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.32);backdrop-filter:blur(20px);overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── Topbar ── */
+#topbar{height:80px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid rgba(57,255,20,0.1);}
+.logo-wrap{display:flex;align-items:center;gap:14px;}
+.logo-container{width:40px;height:40px;border-radius:10px;background:rgba(18,26,35,0.6);border:1px solid rgba(57,255,20,0.25);display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(57,255,20,0.15);cursor:pointer;position:relative;flex-shrink:0;}
+.logo-container svg{animation:wcGlow 2.5s ease-in-out infinite,wcBob 3s ease-in-out infinite;}
+.divider{width:1px;height:36px;background:var(--border);}
+.brand-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;color:var(--green);letter-spacing:3px;line-height:1;text-shadow:0 0 16px rgba(57,255,20,0.5);}
+.brand-sub{font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.badge{padding:3px 7px;border-radius:4px;background:rgba(255,255,255,0.04);border:1px solid var(--border);font-size:9px;color:var(--muted);letter-spacing:1.5px;font-weight:600;}
+.status-pill{display:flex;align-items:center;gap:6px;padding:5px 14px;background:rgba(57,255,20,0.07);border:1px solid rgba(57,255,20,0.3);border-radius:99px;font-size:11px;color:var(--green);font-weight:600;}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;box-shadow:0 0 8px var(--green);}
+.icon-btn{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+
+/* ── Chat Panel ── */
+#chat-panel{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;}
+.panel-header{padding:11px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:rgba(57,255,20,0.025);}
+.panel-header-left{display:flex;align-items:center;gap:10px;}
+.panel-accent{width:3px;height:18px;border-radius:2px;}
+.panel-title{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;}
+.mode-badge{font-size:10px;color:var(--muted);background:rgba(255,255,255,0.05);padding:2px 7px;border-radius:4px;border:1px solid var(--border);}
+.hdr-btns{display:flex;gap:8px;}
+.hdr-btn{padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:1px;border:none;}
+.btn-clear{background:rgba(255,46,209,0.08);border:1px solid rgba(255,46,209,0.25) !important;color:var(--pink);}
+.btn-sources{background:rgba(0,245,212,0.07);border:1px solid rgba(0,245,212,0.25) !important;color:var(--teal);}
+.mode-select{padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:10px;cursor:pointer;outline:none;}
+
+/* ── Messages ── */
+.msg-row{display:flex;align-items:flex-start;gap:8px;}
+.msg-row.user{flex-direction:row-reverse;}
+.avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:2px;}
+.avatar.bot{background:rgba(57,255,20,0.1);border:1px solid rgba(57,255,20,0.3);}
+.avatar.user{background:rgba(57,255,20,0.15);border:1px solid rgba(57,255,20,0.4);font-size:11px;}
+.bubble{max-width:78%;padding:10px 14px;font-size:13px;line-height:1.7;color:var(--text);}
+.bubble.bot{background:rgba(0,245,212,0.07);border:1px solid rgba(0,245,212,0.2);border-radius:2px 12px 12px 12px;}
+.bubble.user{background:rgba(57,255,20,0.09);border:1px solid rgba(57,255,20,0.3);border-radius:12px 2px 12px 12px;}
+.typing-row{display:flex;align-items:flex-start;gap:8px;}
+.typing-bubble{padding:12px 16px;background:rgba(0,245,212,0.07);border:1px solid rgba(0,245,212,0.2);border-radius:2px 12px 12px 12px;display:flex;gap:5px;align-items:center;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal);}
+.dot:nth-child(1){animation:bounce 0.8s ease-in-out 0s infinite;}
+.dot:nth-child(2){animation:bounce 0.8s ease-in-out 0.15s infinite;}
+.dot:nth-child(3){animation:bounce 0.8s ease-in-out 0.3s infinite;}
+
+/* ── Chart card ── */
+.chart-card{background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:10px;box-shadow:0 8px 30px rgba(0,0,0,0.2);}
+.chart-title-label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;color:var(--teal);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;text-align:center;}
+.chart-wrap{position:relative;height:200px;}
+.viz-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:rgba(57,255,20,0.07);border:1px solid rgba(57,255,20,0.25);border-radius:99px;color:var(--green);font-size:11px;cursor:pointer;transition:all 180ms;margin-top:10px;font-family:'Inter',sans-serif;}
+.viz-btn:hover{background:rgba(57,255,20,0.14);box-shadow:0 0 12px rgba(57,255,20,0.25);}
+
+/* ── Chips ── */
+#chips{padding:0 18px 10px;flex-shrink:0;display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;}
+.chip{padding:5px 13px;border-radius:99px;white-space:nowrap;flex-shrink:0;background:rgba(57,255,20,0.05);border:1px solid rgba(57,255,20,0.22);color:var(--green);font-size:11px;cursor:pointer;transition:all 180ms;font-family:'Rajdhani',sans-serif;font-weight:600;}
+.chip:hover{background:rgba(57,255,20,0.12);box-shadow:0 0 12px rgba(57,255,20,0.3);}
+
+/* ── Input ── */
+#input-area{padding:0 18px 16px;flex-shrink:0;}
+.input-wrap{display:flex;gap:10px;align-items:flex-end;background:rgba(255,255,255,0.03);border:1px solid rgba(57,255,20,0.2);border-radius:12px;padding:10px 12px;transition:all 200ms;}
+.input-wrap:focus-within{box-shadow:0 0 24px rgba(57,255,20,0.25);border-color:rgba(57,255,20,0.4);}
+#msg-input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;resize:none;font-family:'Inter',sans-serif;min-height:24px;max-height:100px;line-height:1.5;}
+.send-btn{width:38px;height:38px;border-radius:9px;flex-shrink:0;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(57,255,20,0.45);transition:all 180ms;}
+.send-btn:hover{box-shadow:0 0 28px rgba(57,255,20,0.7);}
+.input-hint{font-size:9.5px;color:rgba(255,255,255,0.22);text-align:center;margin-top:6px;letter-spacing:.5px;}
+
+/* ── Match Panel ── */
+#match-panel{overflow-y:auto;scrollbar-width:thin;}
+.match-header{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(0,245,212,0.025);}
+.match-body{padding:14px 16px;display:flex;flex-direction:column;gap:16px;}
+.section-label{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.section-label::before{content:'';width:12px;height:1.5px;border-radius:1px;background:currentColor;flex-shrink:0;}
+.section-label::after{content:'';flex:1;height:1.5px;border-radius:1px;background:linear-gradient(90deg,currentColor 0%,transparent 100%);opacity:0.3;}
+.team-select{flex:1;padding:7px 8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:11px;outline:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;}
+.vs-badge{padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;font-size:9px;color:var(--muted);font-weight:700;letter-spacing:1px;font-family:'Rajdhani',sans-serif;flex-shrink:0;}
+.run-btn{width:100%;padding:9px;background:linear-gradient(90deg,var(--green),#20cc00);border:none;border-radius:9px;color:#0B0F14;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;cursor:pointer;transition:all 200ms;box-shadow:0 0 18px rgba(57,255,20,0.35);}
+.run-btn:hover{box-shadow:0 0 32px rgba(57,255,20,0.65);transform:translateY(-1px);}
+.prob-row{margin-bottom:10px;}
+.prob-header{display:flex;justify-content:space-between;margin-bottom:5px;font-size:12px;}
+.prob-track{height:7px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.prob-fill{height:100%;border-radius:99px;width:0%;transition:width 700ms cubic-bezier(.2,.8,.2,1);}
+.factor-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.factor-label{font-size:11px;color:var(--muted);}
+.factor-val{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text);font-weight:600;}
+.src-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:all 180ms;}
+.src-row:hover{border-color:rgba(0,245,212,0.35);background:rgba(0,245,212,0.04);}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:24px;width:460px;max-width:90vw;box-shadow:0 24px 60px rgba(0,0,0,0.7);}
+.modal h2{font-family:'Rajdhani',sans-serif;color:var(--teal);font-size:15px;font-weight:700;letter-spacing:2px;margin-bottom:8px;}
+.modal p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:14px;}
+.modal input{width:100%;padding:10px 14px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;margin-bottom:12px;}
+.modal input:focus{border-color:var(--green);}
+.modal-btns{display:flex;gap:10px;}
+.btn-save{flex:1;padding:10px;background:linear-gradient(135deg,#1a472a,#2d6a4f);border:none;border-radius:10px;color:var(--green);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;letter-spacing:1px;cursor:pointer;}
+.btn-cancel{padding:10px 20px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'Inter',sans-serif;font-size:13px;cursor:pointer;}
+
+/* ── BG elements ── */
+#grid-bg{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(57,255,20,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(57,255,20,0.022) 1px,transparent 1px);background-size:48px 48px;}
+#scanline{position:fixed;top:0;left:0;right:0;height:2px;z-index:0;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(57,255,20,0.18),transparent);animation:scanline 8s linear infinite;}
+#glow-tl{position:fixed;top:0;left:0;width:180px;height:180px;z-index:0;pointer-events:none;background:radial-gradient(circle at top left,rgba(57,255,20,0.07),transparent 70%);}
+#glow-br{position:fixed;bottom:0;right:0;width:180px;height:180px;z-index:0;pointer-events:none;background:radial-gradient(circle at bottom right,rgba(0,245,212,0.07),transparent 70%);}
+#trophy-bg{position:fixed;inset:0;z-index:0;pointer-events:none;display:flex;align-items:center;justify-content:center;}
+</style>
+</head>
+<body>
+
+<div id="grid-bg"></div>
+<div id="scanline"></div>
+<div id="glow-tl"></div>
+<div id="glow-br"></div>
+
+<!-- Trophy BG -->
+<div id="trophy-bg">
+  <svg viewBox="0 0 200 460" width="38vmin" height="88vmin"
+    xmlns="http://www.w3.org/2000/svg" style="opacity:0.11">
+    <!-- Globe -->
+    <circle cx="100" cy="68" r="62" fill="none" stroke="white" stroke-width="5"/>
+    <!-- Outer body -->
+    <path fill="none" stroke="white" stroke-width="5" stroke-linejoin="round"
+      d="M 44,114 C 4,132 -8,188 12,228 C 24,258 58,278 78,286 L 32,460 H 168 L 122,286 C 142,278 176,258 188,228 C 208,188 196,132 156,114 A 62 62 0 0 1 44,114 Z"/>
+    <!-- Inner cutout outline -->
+    <path fill="none" stroke="white" stroke-width="3"
+      d="M 78,126 Q 100,108 122,126 C 154,148 166,196 154,232 C 148,252 130,264 116,266 L 84,266 C 70,264 52,252 46,232 C 34,196 46,148 78,126 Z"/>
+  </svg>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>⚙ CONFIGURE API</h2>
+    <p>Paste your ngrok URL from Colab Block 6B. Update this each time you restart your Colab session.</p>
+    <input type="text" id="api-url-input" placeholder="https://xxxx-xx-xx.ngrok-free.app"/>
+    <div class="modal-btns">
+      <button class="btn-save" onclick="saveApiUrl()">Save & Connect</button>
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- Topbar -->
+  <div id="topbar">
+    <div class="logo-wrap">
+
+      <!-- FIFA Trophy Logo 40×40 -->
+      <div class="logo-container" id="logo-btn" onclick="openModal()">
+        <svg viewBox="0 0 200 460" height="36" width="16"
+          xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="tGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#39FF14">
+                <animate attributeName="stop-color" values="#39FF14;#00F5D4;#c9a84c;#39FF14" dur="4s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" stop-color="#00F5D4">
+                <animate attributeName="stop-color" values="#00F5D4;#c9a84c;#39FF14;#00F5D4" dur="4s" repeatCount="indefinite"/>
+              </stop>
+            </linearGradient>
+          </defs>
+          <!-- Globe -->
+          <circle cx="100" cy="68" r="62" fill="url(#tGrad)"/>
+          <!-- Body — arms sweep wide then narrow to waist then triangular base -->
+          <path fill="url(#tGrad)"
+            d="M 44,114 C 4,132 -8,188 12,228 C 24,258 58,278 78,286 L 32,460 H 168 L 122,286 C 142,278 176,258 188,228 C 208,188 196,132 156,114 A 62 62 0 0 1 44,114 Z"/>
+          <!-- Inner cutout — negative space figure -->
+          <path fill="#0B0F14"
+            d="M 78,126 Q 100,108 122,126 C 154,148 166,196 154,232 C 148,252 130,264 116,266 L 84,266 C 70,264 52,252 46,232 C 34,196 46,148 78,126 Z"/>
+        </svg>
+        <!-- Fireworks container -->
+        <div id="fw-container" style="position:absolute;inset:0;pointer-events:none;overflow:visible;"></div>
+      </div>
+
+      <div class="divider"></div>
+      <div>
+        <div class="brand-title">MATCHORACLE AI</div>
+        <div class="brand-sub">Real-Time FIFA Match Intelligence</div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="badge">RAG</div>
+      <div class="badge">FAISS</div>
+      <div class="badge">GPT-3.5</div>
+      <div class="status-pill">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Connecting...</span>
+      </div>
+      <button class="icon-btn" onclick="openModal()">⚙</button>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div id="grid">
+
+    <!-- LEFT: Chat Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-header-left">
+          <div class="panel-accent" style="background:var(--green);box-shadow:0 0 8px var(--green);"></div>
+          <span class="panel-title" style="color:var(--green);">CHAT ANALYST</span>
+          <div class="mode-badge" id="mode-badge">MODE: MATCH</div>
+        </div>
+        <div class="hdr-btns">
+          <button class="hdr-btn btn-clear" onclick="clearChat()">CLEAR</button>
+          <button class="hdr-btn btn-sources" onclick="openModal()">SOURCES</button>
+          <select class="mode-select" id="style-select" onchange="updateMode()">
+            <option value="Detailed with bullet points">Detailed</option>
+            <option value="Short summary">Summary</option>
+            <option value="Stats-heavy">Stats</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="chat-panel">
+        <div id="welcome" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:20px;text-align:center;padding:2rem;">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:1.8rem;font-weight:700;background:linear-gradient(135deg,var(--green),#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Your Personal World Cup Analyst</div>
+          <div style="font-size:.9rem;color:var(--muted);line-height:1.7;max-width:400px;">Ask me anything about World Cup history, get match predictions grounded in real data, or explore team stats from 1930 to 2022.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+            <div class="chip" onclick="quickSend('What are Brazil World Cup stats?')">🇧🇷 Brazil Stats</div>
+            <div class="chip" onclick="quickSend('Predict: France vs Argentina')">🔮 Predict a Match</div>
+            <div class="chip" onclick="quickSend('Top scorers for Germany in the World Cup')">⚽ Top Scorers</div>
+            <div class="chip" onclick="quickSend('Which country has won the most World Cups?')">🏆 Most Titles</div>
+            <div class="chip" onclick="quickSend('Tell me about the greatest World Cup upsets')">⚡ Upsets</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="chips">
+        <button class="chip" onclick="quickSend('Predict this match')">▶ Predict this match</button>
+        <button class="chip" onclick="quickSend('Head-to-head record')">▶ Head-to-head record</button>
+        <button class="chip" onclick="quickSend('Last 5 form')">▶ Last 5 form</button>
+        <button class="chip" onclick="quickSend('Top scorers in World Cup history of all time')">▶ Top scorers</button>
+        <button class="chip" onclick="quickSend('Tell me about the biggest World Cup upsets')">▶ Biggest upsets</button>
+      </div>
+
+      <div id="input-area">
+        <div class="input-wrap">
+          <textarea id="msg-input" rows="1"
+            placeholder="Ask about World Cup history, team stats, or predict a match…"></textarea>
+          <button class="send-btn" onclick="sendMessage()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="#0B0F14" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <div class="input-hint">ENTER TO SEND · SHIFT+ENTER FOR NEW LINE · FIFA DATA 1930–2022</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Match Panel -->
+    <div class="panel" id="match-panel">
+      <div class="match-header">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+          <div style="width:3px;height:18px;background:var(--teal);border-radius:2px;box-shadow:0 0 8px var(--teal);"></div>
+          <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--teal);letter-spacing:2px;">MATCH DATA</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <select class="team-select" id="teamA">
+            <option>Brazil</option><option>Germany</option><option>France</option>
+            <option>Argentina</option><option>Spain</option><option>England</option>
+            <option>Italy</option><option>Portugal</option><option>Netherlands</option>
+            <option>Uruguay</option><option>Croatia</option><option>Belgium</option>
+            <option>Mexico</option><option>Japan</option><option>South Korea</option>
+            <option>United States</option><option>Morocco</option><option>Senegal</option>
+            <option>Ghana</option><option>Nigeria</option>
+          </select>
+          <div class="vs-badge">VS</div>
+          <select class="team-select" id="teamB">
+            <option>Germany</option><option>Brazil</option><option>France</option>
+            <option>Argentina</option><option>Spain</option><option>England</option>
+            <option>Italy</option><option>Portugal</option><option>Netherlands</option>
+            <option>Uruguay</option><option>Croatia</option><option>Belgium</option>
+            <option>Mexico</option><option>Japan</option><option>South Korea</option>
+            <option>United States</option><option>Morocco</option><option>Senegal</option>
+            <option>Ghana</option><option>Nigeria</option>
+          </select>
+        </div>
+        <button class="run-btn" onclick="runPrediction()">▶ RUN PREDICTION</button>
+      </div>
+
+      <div class="match-body">
+        <!-- Win Probability -->
+        <div>
+          <div class="section-label" style="color:var(--green);">Win Probability</div>
+          <div class="prob-row">
+            <div class="prob-header"><span style="color:var(--muted)" id="pLabelA">Brazil</span><span style="color:var(--green);font-weight:700" id="pValA">—</span></div>
+            <div class="prob-track"><div class="prob-fill" id="pFillA" style="background:linear-gradient(90deg,rgba(57,255,20,0.5),var(--green));box-shadow:0 0 10px rgba(57,255,20,0.5);"></div></div>
+          </div>
+          <div class="prob-row">
+            <div class="prob-header"><span style="color:var(--muted)">Draw</span><span style="color:var(--pink);font-weight:700" id="pValD">—</span></div>
+            <div class="prob-track"><div class="prob-fill" id="pFillD" style="background:linear-gradient(90deg,rgba(255,46,209,0.5),var(--pink));box-shadow:0 0 10px rgba(255,46,209,0.5);"></div></div>
+          </div>
+          <div class="prob-row">
+            <div class="prob-header"><span style="color:var(--muted)" id="pLabelB">Germany</span><span style="color:var(--teal);font-weight:700" id="pValB">—</span></div>
+            <div class="prob-track"><div class="prob-fill" id="pFillB" style="background:linear-gradient(90deg,rgba(0,245,212,0.5),var(--teal));box-shadow:0 0 10px rgba(0,245,212,0.5);"></div></div>
+          </div>
+        </div>
+
+        <!-- Key Factors -->
+        <div id="factors-section">
+          <div class="section-label" style="color:var(--teal);">Key Factors</div>
+          <div id="factors-list">
+            <div class="factor-row"><span class="factor-label">Run prediction to load factors</span></div>
+          </div>
+        </div>
+
+        <!-- Donut chart -->
+        <div>
+          <div class="section-label" style="color:var(--pink);">Outcome Distribution</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+            <canvas id="donut-chart" width="130" height="130"></canvas>
+            <div style="display:flex;gap:12px;font-size:11px;">
+              <span style="color:var(--green);" id="donut-a">● Brazil</span>
+              <span style="color:var(--pink);">● Draw</span>
+              <span style="color:var(--teal);" id="donut-b">● Germany</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team Stats -->
+        <div>
+          <div class="section-label" style="color:var(--muted);">Team Stats</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <input id="stats-input" type="text" placeholder="Enter team name…"
+              style="flex:1;padding:7px 10px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:11px;outline:none;font-family:'Inter',sans-serif;"
+              onkeydown="if(event.key==='Enter')loadTeamStats()"/>
+            <button onclick="loadTeamStats()"
+              style="padding:7px 12px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.3);border-radius:8px;color:var(--teal);font-size:11px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;">LOAD</button>
+          </div>
+          <div id="stats-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;"><div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;color:var(--green);" id="sg-matches">–</div><div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Matches</div></div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;"><div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;color:var(--green);" id="sg-wins">–</div><div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Wins</div></div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;"><div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;color:var(--green);" id="sg-wr">–</div><div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Win %</div></div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center;"><div style="font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;color:var(--green);" id="sg-gd">–</div><div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">GD</div></div>
+          </div>
+        </div>
+
+        <!-- Data Sources -->
+        <div>
+          <div class="section-label" style="color:var(--muted);">Data Sources</div>
+          <div class="src-row"><span style="font-size:11px;color:var(--muted);">WC Match History 1930–2022</span><span style="font-size:10px;color:var(--teal);font-weight:700;">97%</span></div>
+          <div class="src-row"><span style="font-size:11px;color:var(--muted);">ELO Ratings Dataset</span><span style="font-size:10px;color:var(--teal);font-weight:700;">94%</span></div>
+          <div class="src-row"><span style="font-size:11px;color:var(--muted);">Recent Form (last 10)</span><span style="font-size:10px;color:var(--teal);font-weight:700;">89%</span></div>
+          <div class="src-row"><span style="font-size:11px;color:var(--muted);">FIFA Player Aggregates</span><span style="font-size:10px;color:var(--teal);font-weight:700;">82%</span></div>
+          <div style="font-size:.7rem;color:#3a4a3a;border-top:1px solid var(--border);padding-top:8px;margin-top:4px;line-height:1.6;">⚠️ Educational use only. Not professional sports analytics advice.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────
+let API_URL = localStorage.getItem('wc_api_url') || '';
+const HEADERS = {'Content-Type':'application/json','ngrok-skip-browser-warning':'true'};
+let donutChart = null;
+const chartRegistry = {};
+
+// ── Modal ─────────────────────────────────────────────────────
+function openModal() {
+  document.getElementById('api-url-input').value = API_URL;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.getElementById('modal').addEventListener('click', e => { if(e.target===document.getElementById('modal')) closeModal(); });
+function saveApiUrl() {
+  const v = document.getElementById('api-url-input').value.trim().replace(/\/$/,'');
+  if(!v){ alert('Please enter a valid URL.'); return; }
+  API_URL = v; localStorage.setItem('wc_api_url', v); closeModal(); checkHealth();
+}
+
+// ── Health ────────────────────────────────────────────────────
+async function checkHealth() {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if(!API_URL){ dot.style.background='#f44336'; txt.textContent='No API URL'; return; }
+  try {
+    const r = await fetch(`${API_URL}/health`,{headers:HEADERS,signal:AbortSignal.timeout(8000)});
+    const d = await r.json();
+    dot.style.background = '#4caf50';
+    txt.textContent = `Live · ${d.vectors} vectors`;
+  } catch(e) {
+    dot.style.background = '#f44336';
+    txt.textContent = 'API Offline';
+  }
+}
+setInterval(checkHealth, 30000);
+checkHealth();
+if(!API_URL) setTimeout(openModal, 1200);
+
+// ── Fireworks ─────────────────────────────────────────────────
+let fwActive = false, fwTimer = null, fwCount = 0;
+document.getElementById('logo-btn').addEventListener('mouseenter', startFw);
+document.getElementById('logo-btn').addEventListener('mouseleave', stopFw);
+
+function startFw() {
+  fwActive=true; fwCount=0; spawnFw();
+}
+function stopFw() {
+  fwActive=false; clearTimeout(fwTimer);
+  document.getElementById('fw-container').innerHTML='';
+}
+function spawnFw() {
+  if(!fwActive || fwCount>9) return;
+  fwCount++;
+  const c=document.getElementById('fw-container');
+  const colors=['#39FF14','#00F5D4','#FF2ED1','#ffffff','#ffd700'];
+  for(let i=0;i<18;i++){
+    const angle=(i/18)*360+Math.random()*10;
+    const speed=36+Math.random()*52;
+    const color=colors[Math.floor(Math.random()*colors.length)];
+    const size=2+Math.random()*3;
+    const rad=(angle*Math.PI)/180;
+    const tx=Math.cos(rad)*speed, ty=Math.sin(rad)*speed;
+    const el=document.createElement('div');
+    el.style.cssText=`position:absolute;top:50%;left:50%;width:${size}px;height:${size}px;border-radius:50%;background:${color};box-shadow:0 0 ${size*2}px ${color};pointer-events:none;animation:fw${i}_${fwCount} 0.9s ease-out forwards;z-index:30;`;
+    const style=document.createElement('style');
+    style.textContent=`@keyframes fw${i}_${fwCount}{0%{transform:translate(-50%,-50%);opacity:1}100%{transform:translate(calc(-50% + ${tx}px),calc(-50% + ${ty}px));opacity:0}}`;
+    document.head.appendChild(style);
+    c.appendChild(el);
+    setTimeout(()=>{ el.remove(); style.remove(); },900);
+  }
+  fwTimer=setTimeout(spawnFw,200);
+}
+
+// ── Chat ──────────────────────────────────────────────────────
+const chatEl = document.getElementById('chat-panel');
+const inputEl = document.getElementById('msg-input');
+let welcomeShown = true;
+
+function hideWelcome() {
+  const w=document.getElementById('welcome');
+  if(w){ w.remove(); welcomeShown=false; }
+}
+
+function appendMsg(role, text) {
+  hideWelcome();
+  const row=document.createElement('div');
+  row.className=`msg-row ${role}`;
+  const ava=document.createElement('div');
+  ava.className=`avatar ${role}`;
+  ava.textContent=role==='bot'?'⚡':'👤';
+  const bub=document.createElement('div');
+  bub.className=`bubble ${role}`;
+  bub.innerHTML=formatText(text);
+  row.appendChild(ava); row.appendChild(bub);
+  chatEl.appendChild(row);
+  chatEl.scrollTop=chatEl.scrollHeight;
+  return bub;
+}
+
+function appendTyping() {
+  hideWelcome();
+  const row=document.createElement('div');
+  row.className='typing-row';
+  const ava=document.createElement('div');
+  ava.className='avatar bot'; ava.textContent='⚡';
+  const bub=document.createElement('div');
+  bub.className='typing-bubble';
+  bub.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  row.appendChild(ava); row.appendChild(bub);
+  chatEl.appendChild(row);
+  chatEl.scrollTop=chatEl.scrollHeight;
+  return row;
+}
+
+function formatText(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong style="color:#fff">$1</strong>')
+    .replace(/\*(.*?)\*/g,'<em>$1</em>')
+    .replace(/•\s/g,'<br>• ').replace(/\n/g,'<br>');
+}
+
+async function sendMessage(text) {
+  const t=(text||inputEl.value).trim(); if(!t) return;
+  if(!API_URL){ openModal(); return; }
+  inputEl.value=''; inputEl.style.height='auto';
+  appendMsg('user',t);
+  const typing=appendTyping();
+  try {
+    const style=document.getElementById('style-select').value;
+    const r=await fetch(`${API_URL}/chat`,{
+      method:'POST', headers:HEADERS,
+      body:JSON.stringify({message:t,style}),
+      signal:AbortSignal.timeout(60000)
+    });
+    const d=await r.json();
+    typing.remove();
+    const bub=appendMsg('bot',d.response||'No response received.');
+    detectAndShowChart(d.response||'',bub,t);
+  } catch(e) {
+    typing.remove();
+    appendMsg('bot',`⚠️ Could not reach the API.\n\nMake sure your Colab session is running and the URL is correct.\n\nError: ${e.message}`);
+  }
+}
+
+function quickSend(t){ inputEl.value=t; sendMessage(t); }
+
+function clearChat() {
+  chatEl.innerHTML='';
+  const w=document.createElement('div');
+  w.id='welcome';
+  w.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:20px;text-align:center;padding:2rem;';
+  w.innerHTML=`<div style="font-family:'Rajdhani',sans-serif;font-size:1.8rem;font-weight:700;background:linear-gradient(135deg,var(--green),#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Your Personal World Cup Analyst</div><div style="font-size:.9rem;color:var(--muted);line-height:1.7;max-width:400px;">Ask me anything about World Cup history, get match predictions grounded in real data, or explore team stats from 1930 to 2022.</div>`;
+  chatEl.appendChild(w);
+  welcomeShown=true;
+}
+
+function updateMode() {
+  const v=document.getElementById('style-select').value;
+  const map={'Detailed with bullet points':'DETAILED','Short summary':'SUMMARY','Stats-heavy':'STATS'};
+  document.getElementById('mode-badge').textContent='MODE: '+(map[v]||'MATCH');
+}
+
+// ── Input resize ──────────────────────────────────────────────
+inputEl.addEventListener('input',function(){
+  this.style.height='auto';
+  this.style.height=Math.min(this.scrollHeight,100)+'px';
+});
+inputEl.addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+});
+
+// ── Run prediction ────────────────────────────────────────────
+async function runPrediction() {
+  const a=document.getElementById('teamA').value;
+  const b=document.getElementById('teamB').value;
+  document.getElementById('pLabelA').textContent=a;
+  document.getElementById('pLabelB').textContent=b;
+  document.getElementById('donut-a').textContent=`● ${a}`;
+  document.getElementById('donut-b').textContent=`● ${b}`;
+  quickSend(`Predict the match: ${a} vs ${b}`);
+  if(API_URL) {
+    try {
+      const r=await fetch(`${API_URL}/chart/h2h/${encodeURIComponent(a)}/${encodeURIComponent(b)}`,{headers:HEADERS});
+      const d=await r.json();
+      if(d.status==='ok') updateProbBars(d.values[0],d.values[1],d.values[2]);
+      updateFactors(a,b);
+      updateDonut(d.values?.[0]||40, d.values?.[1]||20, d.values?.[2]||40);
+    } catch(e){}
+  }
+}
+
+function updateProbBars(a,draw,b) {
+  const total=a+draw+b||100;
+  const pa=Math.round(a/total*100), pd=Math.round(draw/total*100), pb=Math.round(b/total*100);
+  document.getElementById('pValA').textContent=pa+'%';
+  document.getElementById('pValD').textContent=pd+'%';
+  document.getElementById('pValB').textContent=pb+'%';
+  setTimeout(()=>{
+    document.getElementById('pFillA').style.width=pa+'%';
+    document.getElementById('pFillD').style.width=pd+'%';
+    document.getElementById('pFillB').style.width=pb+'%';
+  },100);
+}
+
+function updateFactors(a,b) {
+  const list=document.getElementById('factors-list');
+  list.innerHTML=`
+    <div class="factor-row"><span class="factor-label">ELO Comparison</span><div class="factor-val">Loading… <span style="color:var(--muted)">→</span></div></div>
+    <div class="factor-row"><span class="factor-label">Head-to-Head Record</span><div class="factor-val">Loading… <span style="color:var(--muted)">→</span></div></div>
+    <div class="factor-row"><span class="factor-label">Recent Form (${a})</span><div class="factor-val">Loading… <span style="color:var(--muted)">→</span></div></div>
+    <div class="factor-row"><span class="factor-label">Recent Form (${b})</span><div class="factor-val">Loading… <span style="color:var(--muted)">→</span></div></div>
+  `;
+}
+
+// ── Donut chart ───────────────────────────────────────────────
+function updateDonut(a,draw,b) {
+  if(donutChart) donutChart.destroy();
+  const ctx=document.getElementById('donut-chart').getContext('2d');
+  donutChart=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:['Win','Draw','Win'],datasets:[{data:[a,draw,b],
+      backgroundColor:['#39FF14','#FF2ED1','#00F5D4'],
+      borderColor:'#0B0F14',borderWidth:3,hoverOffset:4}]},
+    options:{responsive:false,cutout:'65%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw}%`}}},
+      animation:{animateRotate:true,duration:600}}
+  });
+}
+updateDonut(44,18,38);
+
+// ── Team stats ────────────────────────────────────────────────
+async function loadTeamStats() {
+  const team=document.getElementById('stats-input').value.trim();
+  if(!team||!API_URL) return;
+  try {
+    const r=await fetch(`${API_URL}/team-stats/${encodeURIComponent(team)}`,{headers:HEADERS});
+    const d=await r.json();
+    if(d.status==='ok') {
+      const s=d.data;
+      document.getElementById('sg-matches').textContent=s.total;
+      document.getElementById('sg-wins').textContent=s.wins;
+      document.getElementById('sg-wr').textContent=s.win_pct+'%';
+      document.getElementById('sg-gd').textContent=(s.goal_diff>0?'+':'')+s.goal_diff;
+    } else {
+      alert(`No data found for "${team}". Try the full country name.`);
+    }
+  } catch(e){ alert('Could not load stats. Check API connection.'); }
+}
+
+// ── Chart detection ───────────────────────────────────────────
+function getChartConfig(text, query='') {
+  const lower=text.toLowerCase(), q=query.toLowerCase();
+  const h2h=text.match(/([A-Z][a-zA-Z\s]{2,20}?)\s+vs\.?\s+([A-Z][a-zA-Z\s]{2,20})/);
+  if(h2h&&(lower.includes('win')||lower.includes('head')||lower.includes('predict')||lower.includes('elo')||lower.includes('form')||lower.includes('report')||lower.includes('match preview'))) {
+    const ta=h2h[1].trim(),tb=h2h[2].trim();
+    return {chartable:true,charts:[
+      {label:'📊 H2H Record',endpoint:`/chart/h2h/${encodeURIComponent(ta)}/${encodeURIComponent(tb)}`,title:`${ta} vs ${tb} — Head to Head`},
+      {label:'🎯 FIFA Radar',endpoint:`/chart/team-radar/${encodeURIComponent(ta)}/${encodeURIComponent(tb)}`,title:`${ta} vs ${tb} — FIFA Ratings`},
+    ]};
+  }
+  if((lower.includes('top scorer')||lower.includes('all-time')||lower.includes('most goals')||lower.includes('leading scorer'))&&!lower.includes('hat')) {
+    const m=text.match(/\bfor ([A-Z][a-zA-Z\s]{2,20})\b/);
+    const team=m?m[1].trim():'all';
+    return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/top-scorers/${encodeURIComponent(team)}`,title:team==='all'?'All-Time Top WC Scorers':`${team} — Top WC Scorers`}]};
+  }
+  if((lower.includes('record')||lower.includes('recent form')||lower.includes('win rate')||lower.includes('world cup stats'))&&!lower.includes(' vs ')&&!lower.includes('hat')) {
+    const m=text.match(/\b(Brazil|Germany|France|Argentina|Spain|England|Italy|Portugal|Netherlands|Belgium|Croatia|Mexico|Uruguay|Japan|South Korea|United States|Morocco|Senegal|Ghana|Nigeria|Poland|Switzerland|Denmark|Australia|Serbia|Cameroon|Ecuador|Qatar|Canada|Wales|Iran|Tunisia|Saudi Arabia|Costa Rica|Algeria|Hungary|Sweden|Romania|Chile|Colombia|Peru)\b/i);
+    if(m) return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/team-form/${encodeURIComponent(m[0])}`,title:`${m[0]} — Recent Form`}]};
+  }
+  if((lower.includes('tournament')||lower.includes('edition'))&&(lower.includes('most goals')||lower.includes('total goals')||lower.includes('highest scoring')||lower.includes('goals per'))) {
+    return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/tournament-goals`,title:'Total Goals by World Cup Tournament'}]};
+  }
+  return {chartable:false};
+}
+
+function detectAndShowChart(text, bub, query='') {
+  const cfg=getChartConfig(text,query);
+  if(!cfg.chartable) return;
+  let idx=0;
+  const btn=document.createElement('button');
+  btn.className='viz-btn';
+  let chartCard=null;
+  function label(){ btn.textContent=cfg.charts[idx].label; }
+  label();
+  btn.onclick=async()=>{
+    const c=cfg.charts[idx];
+    if(cfg.charts.length>1){ idx=(idx+1)%cfg.charts.length; label(); }
+    if(chartCard){ chartCard.remove(); chartCard=null; }
+    const id='chart-'+Date.now();
+    chartCard=document.createElement('div');
+    chartCard.className='chart-card';
+    chartCard.innerHTML=`<div class="chart-title-label">${c.title}</div><div class="chart-wrap"><canvas id="${id}"></canvas></div><div style="text-align:right;margin-top:6px;"><button onclick="this.closest('.chart-card').remove()" style="background:none;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;">✕ Close</button></div>`;
+    const msgRow=bub.closest('.msg-row')||bub.parentElement;
+    msgRow.parentElement.insertBefore(chartCard,msgRow.nextSibling);
+    chatEl.scrollTop=chatEl.scrollHeight;
+    try {
+      const r=await fetch(`${API_URL}${c.endpoint}`,{headers:HEADERS});
+      const d=await r.json();
+      if(d.status==='ok') renderChart(d,id);
+      else document.getElementById(id).closest('.chart-wrap').innerHTML='<div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem;">No chart data available.</div>';
+    } catch(e){
+      document.getElementById(id).closest('.chart-wrap').innerHTML='<div style="color:#e74c3c;text-align:center;padding:2rem;font-size:.85rem;">Failed to load chart.</div>';
+    }
+  };
+  bub.appendChild(btn);
+}
+
+function renderChart(data,containerId) {
+  const wrap=document.getElementById(containerId);
+  if(!wrap) return;
+  if(chartRegistry[containerId]){ chartRegistry[containerId].destroy(); }
+  const ctx=wrap.getContext('2d');
+  const base={responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#e8eaf0',font:{family:'Inter',size:11}}},title:{display:false}},scales:{}};
+  let chart;
+  if(data.type==='bar'){
+    chart=new Chart(ctx,{type:'bar',data:{labels:data.labels,datasets:[{data:data.values,backgroundColor:data.colors,borderRadius:6,borderSkipped:false}]},
+      options:{...base,plugins:{...base.plugins,legend:{display:false}},scales:{x:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+  } else if(data.type==='bar_h'){
+    chart=new Chart(ctx,{type:'bar',data:{labels:data.labels,datasets:[{data:data.values,backgroundColor:data.colors,borderRadius:4,borderSkipped:false}]},
+      options:{...base,indexAxis:'y',plugins:{...base.plugins,legend:{display:false}},scales:{x:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#e8eaf0',font:{size:10}},grid:{display:false}}}}});
+  } else if(data.type==='line'){
+    chart=new Chart(ctx,{type:'line',data:{labels:data.labels,datasets:data.datasets.map(ds=>({label:ds.label,data:ds.values,borderColor:ds.color,backgroundColor:ds.color+'22',tension:0.4,fill:true,pointRadius:2}))},
+      options:{...base,scales:{x:{ticks:{color:'#7a8a9a',maxTicksLimit:6,font:{size:9}},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+  } else if(data.type==='radar'){
+    chart=new Chart(ctx,{type:'radar',data:{labels:data.categories,datasets:data.datasets.map(ds=>({label:ds.label,data:ds.values,borderColor:ds.color,backgroundColor:ds.color+'33',pointBackgroundColor:ds.color,pointRadius:3}))},
+      options:{...base,scales:{r:{ticks:{color:'#7a8a9a',backdropColor:'transparent',font:{size:9}},grid:{color:'rgba(255,255,255,0.1)'},pointLabels:{color:'#e8eaf0',font:{size:10}},suggestedMin:60,suggestedMax:95}}}});
+  }
+  if(chart) chartRegistry[containerId]=chart;
+}
+</script>
+</body>
+</html>
