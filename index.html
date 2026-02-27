@@ -293,25 +293,9 @@ select option{background:#121A23}
           <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:var(--teal);letter-spacing:2px;">MATCH DATA</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-          <select class="team-select" id="teamA">
-            <option>Brazil</option><option>Germany</option><option>France</option>
-            <option>Argentina</option><option>Spain</option><option>England</option>
-            <option>Italy</option><option>Portugal</option><option>Netherlands</option>
-            <option>Uruguay</option><option>Croatia</option><option>Belgium</option>
-            <option>Mexico</option><option>Japan</option><option>South Korea</option>
-            <option>United States</option><option>Morocco</option><option>Senegal</option>
-            <option>Ghana</option><option>Nigeria</option>
-          </select>
+          <select class="team-select" id="teamA"></select>
           <div class="vs-badge">VS</div>
-          <select class="team-select" id="teamB">
-            <option>Germany</option><option>Brazil</option><option>France</option>
-            <option>Argentina</option><option>Spain</option><option>England</option>
-            <option>Italy</option><option>Portugal</option><option>Netherlands</option>
-            <option>Uruguay</option><option>Croatia</option><option>Belgium</option>
-            <option>Mexico</option><option>Japan</option><option>South Korea</option>
-            <option>United States</option><option>Morocco</option><option>Senegal</option>
-            <option>Ghana</option><option>Nigeria</option>
-          </select>
+          <select class="team-select" id="teamB"></select>
         </div>
         <button class="run-btn" onclick="runPrediction()">▶ RUN PREDICTION</button>
       </div>
@@ -637,86 +621,61 @@ async function loadTeamStats() {
   } catch(e){ alert('Could not load stats. Check API connection.'); }
 }
 
-// ── Chart detection ───────────────────────────────────────────
-function getChartConfig(text, query='') {
-  const lower=text.toLowerCase(), q=query.toLowerCase();
-  const h2h=text.match(/([A-Z][a-zA-Z\s]{2,20}?)\s+vs\.?\s+([A-Z][a-zA-Z\s]{2,20})/);
-  if(h2h&&(lower.includes('win')||lower.includes('head')||lower.includes('predict')||lower.includes('elo')||lower.includes('form')||lower.includes('report')||lower.includes('match preview'))) {
-    const ta=h2h[1].trim(),tb=h2h[2].trim();
-    return {chartable:true,charts:[
-      {label:'📊 H2H Record',endpoint:`/chart/h2h/${encodeURIComponent(ta)}/${encodeURIComponent(tb)}`,title:`${ta} vs ${tb} — Head to Head`},
-      {label:'🎯 FIFA Radar',endpoint:`/chart/team-radar/${encodeURIComponent(ta)}/${encodeURIComponent(tb)}`,title:`${ta} vs ${tb} — FIFA Ratings`},
-    ]};
-  }
-  if((lower.includes('top scorer')||lower.includes('all-time')||lower.includes('most goals')||lower.includes('leading scorer'))&&!lower.includes('hat')) {
-    const m=text.match(/\bfor ([A-Z][a-zA-Z\s]{2,20})\b/);
-    const team=m?m[1].trim():'all';
-    return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/top-scorers/${encodeURIComponent(team)}`,title:team==='all'?'All-Time Top WC Scorers':`${team} — Top WC Scorers`}]};
-  }
-  if((lower.includes('record')||lower.includes('recent form')||lower.includes('win rate')||lower.includes('world cup stats'))&&!lower.includes(' vs ')&&!lower.includes('hat')) {
-    const m=text.match(/\b(Brazil|Germany|France|Argentina|Spain|England|Italy|Portugal|Netherlands|Belgium|Croatia|Mexico|Uruguay|Japan|South Korea|United States|Morocco|Senegal|Ghana|Nigeria|Poland|Switzerland|Denmark|Australia|Serbia|Cameroon|Ecuador|Qatar|Canada|Wales|Iran|Tunisia|Saudi Arabia|Costa Rica|Algeria|Hungary|Sweden|Romania|Chile|Colombia|Peru)\b/i);
-    if(m) return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/team-form/${encodeURIComponent(m[0])}`,title:`${m[0]} — Recent Form`}]};
-  }
-  if((lower.includes('tournament')||lower.includes('edition'))&&(lower.includes('most goals')||lower.includes('total goals')||lower.includes('highest scoring')||lower.includes('goals per'))) {
-    return {chartable:true,charts:[{label:'📊 View Chart',endpoint:`/chart/tournament-goals`,title:'Total Goals by World Cup Tournament'}]};
-  }
-  return {chartable:false};
-}
+// ── All 83 WC teams ───────────────────────────────────────────
+const ALL_TEAMS = [
+  "Algeria","Angola","Argentina","Australia","Austria","Belgium","Bolivia",
+  "Bosnia and Herzegovina","Brazil","Bulgaria","Cameroon","Canada","Chile",
+  "China","Colombia","Costa Rica","Croatia","Cuba","Czech Republic",
+  "Czechoslovakia","Denmark","East Germany","Ecuador","Egypt","El Salvador",
+  "England","France","Germany","Ghana","Greece","Haiti","Honduras","Hungary",
+  "Iceland","Indonesia","Iran","Iraq","Israel","Italy","Ivory Coast","Jamaica",
+  "Japan","Kuwait","Mexico","Morocco","Netherlands","New Zealand","Nigeria",
+  "North Korea","Northern Ireland","Norway","Panama","Paraguay","Peru","Poland",
+  "Portugal","Qatar","Republic of Ireland","Romania","Russia","Saudi Arabia",
+  "Scotland","Senegal","Serbia","Slovakia","Slovenia","South Africa",
+  "South Korea","Spain","Sweden","Switzerland","Togo","Trinidad and Tobago",
+  "Tunisia","Turkey","Ukraine","United Arab Emirates","United States",
+  "Uruguay","Wales","West Germany","Yugoslavia","Zaire"
+];
 
+// Populate both dropdowns
+function populateTeamDropdowns() {
+  const a = document.getElementById('teamA');
+  const b = document.getElementById('teamB');
+  ALL_TEAMS.forEach((t, i) => {
+    a.innerHTML += `<option value="${t}">${t}</option>`;
+    b.innerHTML += `<option value="${t}" ${i===1?'selected':''}>${t}</option>`;
+  });
+}
+populateTeamDropdowns();
+
+// ── Copy Stats button (replaces chart button) ─────────────────
 function detectAndShowChart(text, bub, query='') {
-  const cfg=getChartConfig(text,query);
-  if(!cfg.chartable) return;
-  let idx=0;
-  const btn=document.createElement('button');
-  btn.className='viz-btn';
-  let chartCard=null;
-  function label(){ btn.textContent=cfg.charts[idx].label; }
-  label();
-  btn.onclick=async()=>{
-    const c=cfg.charts[idx];
-    if(cfg.charts.length>1){ idx=(idx+1)%cfg.charts.length; label(); }
-    if(chartCard){ chartCard.remove(); chartCard=null; }
-    const id='chart-'+Date.now();
-    chartCard=document.createElement('div');
-    chartCard.className='chart-card';
-    chartCard.innerHTML=`<div class="chart-title-label">${c.title}</div><div class="chart-wrap"><canvas id="${id}"></canvas></div><div style="text-align:right;margin-top:6px;"><button onclick="this.closest('.chart-card').remove()" style="background:none;border:none;color:var(--muted);font-size:.75rem;cursor:pointer;">✕ Close</button></div>`;
-    const msgRow=bub.closest('.msg-row')||bub.parentElement;
-    msgRow.parentElement.insertBefore(chartCard,msgRow.nextSibling);
-    chatEl.scrollTop=chatEl.scrollHeight;
-    try {
-      const r=await fetch(`${API_URL}${c.endpoint}`,{headers:HEADERS});
-      const d=await r.json();
-      if(d.status==='ok') renderChart(d,id);
-      else document.getElementById(id).closest('.chart-wrap').innerHTML='<div style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem;">No chart data available.</div>';
-    } catch(e){
-      document.getElementById(id).closest('.chart-wrap').innerHTML='<div style="color:#e74c3c;text-align:center;padding:2rem;font-size:.85rem;">Failed to load chart.</div>';
-    }
+  const lower = text.toLowerCase();
+  // Only show copy button for prediction/match responses
+  const h2h = text.match(/([A-Z][a-zA-Z\s]{2,20}?)\s+vs\.?\s+([A-Z][a-zA-Z\s]{2,20})/);
+  const isPrediction = h2h && (lower.includes('win') || lower.includes('elo') ||
+    lower.includes('form') || lower.includes('predict') || lower.includes('head'));
+  const isStats = lower.includes('win rate') || lower.includes('goals scored') ||
+    lower.includes('matches') || lower.includes('record');
+
+  if (!isPrediction && !isStats) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'viz-btn';
+  btn.textContent = '📋 Copy Stats';
+  btn.style.marginTop = '10px';
+  btn.onclick = () => {
+    const plain = bub.innerText || bub.textContent;
+    navigator.clipboard.writeText(plain).then(() => {
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => btn.textContent = '📋 Copy Stats', 2000);
+    }).catch(() => {
+      btn.textContent = '❌ Failed';
+      setTimeout(() => btn.textContent = '📋 Copy Stats', 2000);
+    });
   };
   bub.appendChild(btn);
-}
-
-function renderChart(data,containerId) {
-  const wrap=document.getElementById(containerId);
-  if(!wrap) return;
-  if(chartRegistry[containerId]){ chartRegistry[containerId].destroy(); }
-  const ctx=wrap.getContext('2d');
-  const base={responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{labels:{color:'#e8eaf0',font:{family:'Inter',size:11}}},title:{display:false}},scales:{}};
-  let chart;
-  if(data.type==='bar'){
-    chart=new Chart(ctx,{type:'bar',data:{labels:data.labels,datasets:[{data:data.values,backgroundColor:data.colors,borderRadius:6,borderSkipped:false}]},
-      options:{...base,plugins:{...base.plugins,legend:{display:false}},scales:{x:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
-  } else if(data.type==='bar_h'){
-    chart=new Chart(ctx,{type:'bar',data:{labels:data.labels,datasets:[{data:data.values,backgroundColor:data.colors,borderRadius:4,borderSkipped:false}]},
-      options:{...base,indexAxis:'y',plugins:{...base.plugins,legend:{display:false}},scales:{x:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#e8eaf0',font:{size:10}},grid:{display:false}}}}});
-  } else if(data.type==='line'){
-    chart=new Chart(ctx,{type:'line',data:{labels:data.labels,datasets:data.datasets.map(ds=>({label:ds.label,data:ds.values,borderColor:ds.color,backgroundColor:ds.color+'22',tension:0.4,fill:true,pointRadius:2}))},
-      options:{...base,scales:{x:{ticks:{color:'#7a8a9a',maxTicksLimit:6,font:{size:9}},grid:{color:'rgba(255,255,255,0.05)'}},y:{ticks:{color:'#7a8a9a'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
-  } else if(data.type==='radar'){
-    chart=new Chart(ctx,{type:'radar',data:{labels:data.categories,datasets:data.datasets.map(ds=>({label:ds.label,data:ds.values,borderColor:ds.color,backgroundColor:ds.color+'33',pointBackgroundColor:ds.color,pointRadius:3}))},
-      options:{...base,scales:{r:{ticks:{color:'#7a8a9a',backdropColor:'transparent',font:{size:9}},grid:{color:'rgba(255,255,255,0.1)'},pointLabels:{color:'#e8eaf0',font:{size:10}},suggestedMin:60,suggestedMax:95}}}});
-  }
-  if(chart) chartRegistry[containerId]=chart;
 }
 </script>
 </body>
